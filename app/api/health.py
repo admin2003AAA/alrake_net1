@@ -4,7 +4,7 @@ Health check endpoint.
 from __future__ import annotations
 
 import time
-from typing import Dict, Any
+from typing import Any
 
 from fastapi import APIRouter
 from sqlalchemy import text
@@ -17,7 +17,7 @@ _start_time = time.time()
 
 
 @router.get("/health")
-async def health_check() -> Dict[str, Any]:
+async def health_check() -> dict[str, Any]:
     """Simple health check endpoint."""
     return {
         "status": "ok",
@@ -26,7 +26,7 @@ async def health_check() -> Dict[str, Any]:
 
 
 @router.get("/status")
-async def status() -> Dict[str, Any]:
+async def status() -> dict[str, Any]:
     """Extended status with DB connectivity check."""
     from app.db.session import async_engine
     from app.monitoring.scheduler import get_scheduler

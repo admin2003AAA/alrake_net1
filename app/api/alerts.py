@@ -3,7 +3,7 @@ Alerts API endpoints.
 """
 from __future__ import annotations
 
-from typing import Any, List, Optional
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -21,16 +21,16 @@ class AlertOut(BaseModel):
     device_id: int
     alert_type: str
     severity: str
-    interface_name: Optional[str]
+    interface_name: str | None
     message: str
     is_active: bool
-    fired_at: Optional[str]
-    resolved_at: Optional[str]
+    fired_at: str | None
+    resolved_at: str | None
 
     model_config = {"from_attributes": True}
 
 
-@router.get("", response_model=List[AlertOut])
+@router.get("", response_model=list[AlertOut])
 async def list_alerts(
     db: AsyncSession = Depends(get_db),
     active_only: bool = False,

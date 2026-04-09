@@ -3,7 +3,7 @@ Topology API endpoints.
 """
 from __future__ import annotations
 
-from typing import Any, List, Optional
+from typing import Any
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
@@ -20,26 +20,26 @@ class TopologyNodeOut(BaseModel):
     id: int
     name: str
     ip_address: str
-    device_type: Optional[str]
-    status: Optional[str]
+    device_type: str | None
+    status: str | None
 
 
 class TopologyLinkOut(BaseModel):
     id: int
     local_device_id: int
-    local_interface: Optional[str]
-    remote_device_id: Optional[int]
-    remote_ip: Optional[str]
-    remote_hostname: Optional[str]
-    remote_interface: Optional[str]
-    remote_platform: Optional[str]
+    local_interface: str | None
+    remote_device_id: int | None
+    remote_ip: str | None
+    remote_hostname: str | None
+    remote_interface: str | None
+    remote_platform: str | None
     protocol: str
     is_active: bool
 
 
 class TopologyGraphOut(BaseModel):
-    devices: List[TopologyNodeOut]
-    links: List[TopologyLinkOut]
+    devices: list[TopologyNodeOut]
+    links: list[TopologyLinkOut]
 
 
 @router.get("", response_model=TopologyGraphOut)

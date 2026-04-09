@@ -17,9 +17,8 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import Optional
 
-from sqlalchemy import select, update
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings, get_settings
@@ -50,11 +49,11 @@ async def _upsert_device(
     ip: str,
     name: str,
     device_type: DeviceType = DeviceType.UNKNOWN,
-    hostname: Optional[str] = None,
-    vendor: Optional[str] = None,
-    model: Optional[str] = None,
-    software_version: Optional[str] = None,
-    serial_number: Optional[str] = None,
+    hostname: str | None = None,
+    vendor: str | None = None,
+    model: str | None = None,
+    software_version: str | None = None,
+    serial_number: str | None = None,
     is_bootstrap: bool = False,
 ) -> Device:
     """Insert or update a device record. Returns the device ORM object."""
@@ -171,7 +170,7 @@ async def _upsert_topology_link(
     db: AsyncSession,
     local_device: Device,
     neighbor: NeighborInfo,
-    remote_device: Optional[Device],
+    remote_device: Device | None,
 ) -> None:
     """Upsert a topology link for a discovered neighbor."""
     result = await db.execute(

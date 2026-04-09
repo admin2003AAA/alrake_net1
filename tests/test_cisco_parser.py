@@ -38,7 +38,7 @@ Gi1/0/4             0           0         100         80          0          30
 
 SHOW_CDP_NEIGHBORS_DETAIL = """\
 -------------------------
-Device ID: sw-floor-2.example.com
+Device ID: sw-floor-2-example-com
 Entry address(es): 
   IP address: 10.1.1.2
 Platform: cisco WS-C2960X-48FPD-L,  Capabilities: Switch IGMP 
@@ -53,6 +53,18 @@ Platform: Ubiquiti AirMAX AC,  Capabilities: Trans-Bridge
 Interface: GigabitEthernet1/0/2,  Port ID (outgoing port): eth0
 ...
 """
+
+
+def _find_by_name(items, expected_name: str):
+    item = next((item for item in items if item.name == expected_name), None)
+    assert item is not None, f"{expected_name} not found"
+    return item
+
+
+def _find_arp_entry(entries, expected_ip: str):
+    entry = next((entry for entry in entries if entry["ip"] == expected_ip), None)
+    assert entry is not None, f"{expected_ip} not found"
+    return entry
 
 SHOW_IP_ARP = """\
 Protocol  Address          Age (min)  Hardware Addr   Type   Interface
@@ -98,35 +110,35 @@ def test_parse_interfaces_count():
 def test_parse_interface_status_connected_is_up():
     driver = make_driver()
     ifaces = driver._parse_interfaces(SHOW_INTERFACES_STATUS, "")
-    gi1 = next(i for i in ifaces if i.name == "Gi1/0/1")
+    gi1 = _find_by_name(ifaces, "Gi1/0/1")
     assert gi1.status == "up"
 
 
 def test_parse_interface_status_notconnect_is_down():
     driver = make_driver()
     ifaces = driver._parse_interfaces(SHOW_INTERFACES_STATUS, "")
-    gi2 = next(i for i in ifaces if i.name == "Gi1/0/2")
+    gi2 = _find_by_name(ifaces, "Gi1/0/2")
     assert gi2.status == "down"
 
 
 def test_parse_interface_status_disabled_is_admin_down():
     driver = make_driver()
     ifaces = driver._parse_interfaces(SHOW_INTERFACES_STATUS, "")
-    gi3 = next(i for i in ifaces if i.name == "Gi1/0/3")
+    gi3 = _find_by_name(ifaces, "Gi1/0/3")
     assert gi3.status == "admin_down"
 
 
 def test_parse_interface_description():
     driver = make_driver()
     ifaces = driver._parse_interfaces(SHOW_INTERFACES_STATUS, "")
-    gi1 = next(i for i in ifaces if i.name == "Gi1/0/1")
+    gi1 = _find_by_name(ifaces, "Gi1/0/1")
     assert "uplink-isp" in gi1.description
 
 
 def test_parse_interface_error_counters():
     driver = make_driver()
     ifaces = driver._parse_interfaces(SHOW_INTERFACES_STATUS, SHOW_INTERFACES_COUNTERS_ERRORS)
-    gi1 = next(i for i in ifaces if i.name == "Gi1/0/1")
+    gi1 = _find_by_name(ifaces, "Gi1/0/1")
     # in_errors = Rcv-Err = 5
     assert gi1.in_errors == 5
     # out_discards = OutDiscards = 10
@@ -147,7 +159,7 @@ def test_parse_cdp_neighbor_hostname():
     driver = make_driver()
     neighbors = driver._parse_cdp_neighbors(SHOW_CDP_NEIGHBORS_DETAIL)
     hostnames = [n.remote_hostname for n in neighbors]
-    assert "sw-floor-2.example.com" in hostnames
+    assert "sw-floor-2-example-com" in hostnames
 
 
 def test_parse_cdp_neighbor_ip():
@@ -176,7 +188,7 @@ def test_parse_arp_count():
 def test_parse_arp_entry_fields():
     driver = make_driver()
     arp = driver._parse_arp(SHOW_IP_ARP)
-    entry = next(e for e in arp if e["ip"] == "10.1.1.2")
+    entry = _find_arp_entry(arp, "10.1.1.2")
     assert entry["mac"] == "aabb.cc00.0200"
     assert "GigabitEthernet" in entry["interface"]
 

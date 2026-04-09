@@ -3,7 +3,7 @@ Devices API endpoints.
 """
 from __future__ import annotations
 
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -20,19 +20,19 @@ class DeviceOut(BaseModel):
     id: int
     name: str
     ip_address: str
-    device_type: Optional[str]
-    status: Optional[str]
-    vendor: Optional[str]
-    model: Optional[str]
-    software_version: Optional[str]
+    device_type: str | None
+    status: str | None
+    vendor: str | None
+    model: str | None
+    software_version: str | None
     is_bootstrap: bool
-    last_seen: Optional[str]
-    last_polled: Optional[str]
+    last_seen: str | None
+    last_polled: str | None
 
     model_config = {"from_attributes": True}
 
 
-@router.get("", response_model=List[DeviceOut])
+@router.get("", response_model=list[DeviceOut])
 async def list_devices(
     db: AsyncSession = Depends(get_db),
     skip: int = 0,

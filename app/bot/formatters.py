@@ -5,7 +5,6 @@ All messages are in Arabic with English technical terms.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Optional
 
 from app.db.models import Alert, AlertSeverity, AlertType, Device
 

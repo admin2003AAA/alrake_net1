@@ -4,7 +4,6 @@ Telegram bot command and message handlers.
 from __future__ import annotations
 
 import logging
-from typing import List
 
 from aiogram import Dispatcher, Router
 from aiogram.filters import Command
@@ -80,7 +79,7 @@ async def cmd_status(message: Message) -> None:
 async def cmd_devices(message: Message) -> None:
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(Device).limit(20))
-        devices: List[Device] = list(result.scalars().all())
+        devices: list[Device] = list(result.scalars().all())
 
     if not devices:
         await message.answer("لا توجد أجهزة مكتشفة بعد. جرّب /discover أولًا.")
@@ -107,7 +106,7 @@ async def cmd_alerts(message: Message) -> None:
             .order_by(Alert.fired_at.desc())
             .limit(10)
         )
-        alerts: List[Alert] = list(result.scalars().all())
+        alerts: list[Alert] = list(result.scalars().all())
 
     if not alerts:
         await message.answer("✅ لا توجد تنبيهات نشطة حاليًا.")

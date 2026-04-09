@@ -9,10 +9,8 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import List
 
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.db.models import (
@@ -227,7 +225,7 @@ async def poll_all_devices() -> dict[str, int]:
     """Fetch all devices from DB and poll each one."""
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(Device))
-        devices: List[Device] = sorted(
+        devices: list[Device] = sorted(
             list(result.scalars().all()),
             key=lambda device: (not device.is_bootstrap, device.id),
         )

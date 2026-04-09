@@ -5,7 +5,6 @@ Uses aiogram 3.x.
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from aiogram import Bot, Dispatcher
 from aiogram.enums import ParseMode
@@ -17,8 +16,8 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 # Global Bot instance (initialized once at startup)
-_bot: Optional[Bot] = None
-_dp: Optional[Dispatcher] = None
+_bot: Bot | None = None
+_dp: Dispatcher | None = None
 
 
 def get_bot() -> Bot:

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import abc
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass
@@ -15,10 +15,10 @@ class InterfaceInfo:
     name: str
     description: str = ""
     status: str = "unknown"        # up / down / admin_down
-    speed_mbps: Optional[int] = None
-    duplex: Optional[str] = None
-    vlan: Optional[str] = None
-    mac_address: Optional[str] = None
+    speed_mbps: int | None = None
+    duplex: str | None = None
+    vlan: str | None = None
+    mac_address: str | None = None
     in_errors: int = 0
     out_errors: int = 0
     in_discards: int = 0
@@ -44,11 +44,11 @@ class DeviceInfo:
     model: str = ""
     software_version: str = ""
     serial_number: str = ""
-    interfaces: List[InterfaceInfo] = field(default_factory=list)
-    neighbors: List[NeighborInfo] = field(default_factory=list)
-    arp_table: List[Dict[str, str]] = field(default_factory=list)
-    mac_table: List[Dict[str, str]] = field(default_factory=list)
-    extra: Dict[str, Any] = field(default_factory=dict)
+    interfaces: list[InterfaceInfo] = field(default_factory=list)
+    neighbors: list[NeighborInfo] = field(default_factory=list)
+    arp_table: list[dict[str, str]] = field(default_factory=list)
+    mac_table: list[dict[str, str]] = field(default_factory=list)
+    extra: dict[str, Any] = field(default_factory=dict)
 
 
 class BaseDriver(abc.ABC):
@@ -86,11 +86,11 @@ class BaseDriver(abc.ABC):
         """
 
     @abc.abstractmethod
-    async def get_interfaces(self) -> List[InterfaceInfo]:
+    async def get_interfaces(self) -> list[InterfaceInfo]:
         """Return current status of all interfaces."""
 
     @abc.abstractmethod
-    async def get_neighbors(self) -> List[NeighborInfo]:
+    async def get_neighbors(self) -> list[NeighborInfo]:
         """Return discovered neighbors (CDP/LLDP/etc)."""
 
     async def __aenter__(self) -> "BaseDriver":

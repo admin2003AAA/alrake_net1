@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import enum
 from datetime import datetime
-from typing import List, Optional
 
 from sqlalchemy import (
     BigInteger,
@@ -83,7 +82,7 @@ class Device(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     name: Mapped[str] = mapped_column(String(255), unique=True, index=True)
-    hostname: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    hostname: Mapped[str | None] = mapped_column(String(255), nullable=True)
     ip_address: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     device_type: Mapped[DeviceType] = mapped_column(
         Enum(DeviceType), default=DeviceType.UNKNOWN
@@ -92,18 +91,18 @@ class Device(Base):
         Enum(DeviceStatus), default=DeviceStatus.UNKNOWN
     )
     is_bootstrap: Mapped[bool] = mapped_column(Boolean, default=False)
-    vendor: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
-    model: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
-    software_version: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
-    serial_number: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
-    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    vendor: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    model: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    software_version: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    serial_number: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
     ssh_port: Mapped[int] = mapped_column(Integer, default=22)
-    snmp_community: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    snmp_community: Mapped[str | None] = mapped_column(String(128), nullable=True)
     snmp_port: Mapped[int] = mapped_column(Integer, default=161)
-    last_seen: Mapped[Optional[datetime]] = mapped_column(
+    last_seen: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    last_polled: Mapped[Optional[datetime]] = mapped_column(
+    last_polled: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
@@ -114,16 +113,16 @@ class Device(Base):
     )
 
     # Relationships
-    interfaces: Mapped[List["Interface"]] = relationship(
+    interfaces: Mapped[list["Interface"]] = relationship(
         "Interface", back_populates="device", cascade="all, delete-orphan"
     )
-    alerts: Mapped[List["Alert"]] = relationship(
+    alerts: Mapped[list["Alert"]] = relationship(
         "Alert", back_populates="device", cascade="all, delete-orphan"
     )
-    metrics: Mapped[List["Metric"]] = relationship(
+    metrics: Mapped[list["Metric"]] = relationship(
         "Metric", back_populates="device", cascade="all, delete-orphan"
     )
-    outgoing_links: Mapped[List["TopologyLink"]] = relationship(
+    outgoing_links: Mapped[list["TopologyLink"]] = relationship(
         "TopologyLink",
         foreign_keys="TopologyLink.local_device_id",
         back_populates="local_device",
@@ -147,14 +146,14 @@ class Interface(Base):
         Integer, ForeignKey("devices.id", ondelete="CASCADE"), index=True
     )
     name: Mapped[str] = mapped_column(String(128))
-    description: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    description: Mapped[str | None] = mapped_column(String(255), nullable=True)
     status: Mapped[InterfaceStatus] = mapped_column(
         Enum(InterfaceStatus), default=InterfaceStatus.UNKNOWN
     )
-    speed_mbps: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
-    duplex: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
-    vlan: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    mac_address: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    speed_mbps: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    duplex: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    vlan: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    mac_address: Mapped[str | None] = mapped_column(String(32), nullable=True)
     in_errors: Mapped[int] = mapped_column(BigInteger, default=0)
     out_errors: Mapped[int] = mapped_column(BigInteger, default=0)
     in_discards: Mapped[int] = mapped_column(BigInteger, default=0)
@@ -163,7 +162,7 @@ class Interface(Base):
     prev_out_errors: Mapped[int] = mapped_column(BigInteger, default=0)
     prev_in_discards: Mapped[int] = mapped_column(BigInteger, default=0)
     prev_out_discards: Mapped[int] = mapped_column(BigInteger, default=0)
-    last_status_change: Mapped[Optional[datetime]] = mapped_column(
+    last_status_change: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
@@ -192,18 +191,18 @@ class TopologyLink(Base):
     local_device_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("devices.id", ondelete="CASCADE"), index=True
     )
-    local_interface: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
-    remote_device_id: Mapped[Optional[int]] = mapped_column(
+    local_interface: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    remote_device_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("devices.id", ondelete="SET NULL"), nullable=True
     )
-    remote_ip: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
-    remote_hostname: Mapped[Optional[str]] = mapped_column(
+    remote_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    remote_hostname: Mapped[str | None] = mapped_column(
         String(255), nullable=True
     )
-    remote_interface: Mapped[Optional[str]] = mapped_column(
+    remote_interface: Mapped[str | None] = mapped_column(
         String(128), nullable=True
     )
-    remote_platform: Mapped[Optional[str]] = mapped_column(
+    remote_platform: Mapped[str | None] = mapped_column(
         String(128), nullable=True
     )
     protocol: Mapped[str] = mapped_column(String(16), default="cdp")
@@ -245,21 +244,21 @@ class Alert(Base):
     severity: Mapped[AlertSeverity] = mapped_column(
         Enum(AlertSeverity), default=AlertSeverity.WARNING
     )
-    interface_name: Mapped[Optional[str]] = mapped_column(
+    interface_name: Mapped[str | None] = mapped_column(
         String(128), nullable=True
     )
     message: Mapped[str] = mapped_column(Text)
-    details: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    details: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     is_sent: Mapped[bool] = mapped_column(Boolean, default=False)
     dedup_key: Mapped[str] = mapped_column(String(512), index=True)
     fired_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
-    resolved_at: Mapped[Optional[datetime]] = mapped_column(
+    resolved_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    last_sent_at: Mapped[Optional[datetime]] = mapped_column(
+    last_sent_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
@@ -285,12 +284,12 @@ class Metric(Base):
     device_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("devices.id", ondelete="CASCADE"), index=True
     )
-    interface_name: Mapped[Optional[str]] = mapped_column(
+    interface_name: Mapped[str | None] = mapped_column(
         String(128), nullable=True
     )
     metric_name: Mapped[str] = mapped_column(String(128), index=True)
     value: Mapped[float] = mapped_column(Float)
-    unit: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    unit: Mapped[str | None] = mapped_column(String(32), nullable=True)
     recorded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), index=True
     )

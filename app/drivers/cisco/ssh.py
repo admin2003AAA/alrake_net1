@@ -8,7 +8,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from app.drivers.base import BaseDriver, DeviceInfo, InterfaceInfo, NeighborInfo
 
@@ -52,7 +52,7 @@ class CiscoSSHDriver(BaseDriver):
                 "Install it with: pip install netmiko"
             ) from exc
 
-        params: Dict[str, Any] = {
+        params: dict[str, Any] = {
             "device_type": self.device_type,
             "host": self.host,
             "username": self.username,
@@ -126,7 +126,7 @@ class CiscoSSHDriver(BaseDriver):
     # Interfaces
     # ------------------------------------------------------------------
 
-    async def get_interfaces(self) -> List[InterfaceInfo]:
+    async def get_interfaces(self) -> list[InterfaceInfo]:
         """Collect interface status and error counters."""
         status_raw = await self._run_command("show interfaces status")
         counters_raw = await self._run_command("show interfaces counters errors")
@@ -134,8 +134,8 @@ class CiscoSSHDriver(BaseDriver):
 
     def _parse_interfaces(
         self, status_output: str, counters_output: str
-    ) -> List[InterfaceInfo]:
-        interfaces: List[InterfaceInfo] = []
+    ) -> list[InterfaceInfo]:
+        interfaces: list[InterfaceInfo] = []
 
         # Parse "show interfaces status" output
         # Example line:
@@ -165,7 +165,7 @@ class CiscoSSHDriver(BaseDriver):
             }
             status = status_map.get(raw_status, "unknown")
 
-            speed_mbps: Optional[int] = None
+            speed_mbps: int | None = None
             speed_match = re.search(r"(\d+)", speed)
             if speed_match:
                 raw_speed = int(speed_match.group(1))
@@ -183,7 +183,7 @@ class CiscoSSHDriver(BaseDriver):
             interfaces.append(iface)
 
         # Parse counters and merge
-        error_map: Dict[str, Dict[str, int]] = {}
+        error_map: dict[str, dict[str, int]] = {}
         # show interfaces counters errors format (IOS):
         # Port        Align-Err     FCS-Err    Xmit-Err    Rcv-Err  UnderSize OutDiscards
         for line in counters_output.splitlines():
@@ -213,13 +213,13 @@ class CiscoSSHDriver(BaseDriver):
     # Neighbors
     # ------------------------------------------------------------------
 
-    async def get_neighbors(self) -> List[NeighborInfo]:
-        neighbors: List[NeighborInfo] = []
+    async def get_neighbors(self) -> list[NeighborInfo]:
+        neighbors: list[NeighborInfo] = []
         neighbors.extend(await self._get_cdp_neighbors())
         neighbors.extend(await self._get_lldp_neighbors())
         return neighbors
 
-    async def _get_cdp_neighbors(self) -> List[NeighborInfo]:
+    async def _get_cdp_neighbors(self) -> list[NeighborInfo]:
         try:
             raw = await self._run_command("show cdp neighbors detail")
             return self._parse_cdp_neighbors(raw)
@@ -227,8 +227,8 @@ class CiscoSSHDriver(BaseDriver):
             logger.debug("CDP neighbors not available on %s: %s", self.host, exc)
             return []
 
-    def _parse_cdp_neighbors(self, output: str) -> List[NeighborInfo]:
-        neighbors: List[NeighborInfo] = []
+    def _parse_cdp_neighbors(self, output: str) -> list[NeighborInfo]:
+        neighbors: list[NeighborInfo] = []
         # Split on separator line
         blocks = re.split(r"-{5,}", output)
         for block in blocks:
@@ -266,7 +266,7 @@ class CiscoSSHDriver(BaseDriver):
             )
         return neighbors
 
-    async def _get_lldp_neighbors(self) -> List[NeighborInfo]:
+    async def _get_lldp_neighbors(self) -> list[NeighborInfo]:
         try:
             raw = await self._run_command("show lldp neighbors detail")
             return self._parse_lldp_neighbors(raw)
@@ -274,8 +274,8 @@ class CiscoSSHDriver(BaseDriver):
             logger.debug("LLDP neighbors not available on %s: %s", self.host, exc)
             return []
 
-    def _parse_lldp_neighbors(self, output: str) -> List[NeighborInfo]:
-        neighbors: List[NeighborInfo] = []
+    def _parse_lldp_neighbors(self, output: str) -> list[NeighborInfo]:
+        neighbors: list[NeighborInfo] = []
         blocks = re.split(r"-{5,}", output)
         for block in blocks:
             if not block.strip():
@@ -313,12 +313,12 @@ class CiscoSSHDriver(BaseDriver):
     # ARP
     # ------------------------------------------------------------------
 
-    async def _get_arp_table(self) -> List[Dict[str, str]]:
+    async def _get_arp_table(self) -> list[dict[str, str]]:
         raw = await self._run_command("show ip arp")
         return self._parse_arp(raw)
 
-    def _parse_arp(self, output: str) -> List[Dict[str, str]]:
-        entries: List[Dict[str, str]] = []
+    def _parse_arp(self, output: str) -> list[dict[str, str]]:
+        entries: list[dict[str, str]] = []
         # Internet  10.0.0.1  -  aabb.cc00.0100  ARPA  GigabitEthernet0/0
         for line in output.splitlines():
             m = re.match(
@@ -341,12 +341,12 @@ class CiscoSSHDriver(BaseDriver):
     # MAC Table
     # ------------------------------------------------------------------
 
-    async def _get_mac_table(self) -> List[Dict[str, str]]:
+    async def _get_mac_table(self) -> list[dict[str, str]]:
         raw = await self._run_command("show mac address-table")
         return self._parse_mac_table(raw)
 
-    def _parse_mac_table(self, output: str) -> List[Dict[str, str]]:
-        entries: List[Dict[str, str]] = []
+    def _parse_mac_table(self, output: str) -> list[dict[str, str]]:
+        entries: list[dict[str, str]] = []
         #   10  aabb.cc00.0100  DYNAMIC  Gi1/0/1
         for line in output.splitlines():
             m = re.match(

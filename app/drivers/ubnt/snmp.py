@@ -5,7 +5,6 @@ Full implementation will use SNMP + SSH.
 from __future__ import annotations
 
 import logging
-from typing import List
 
 from app.drivers.base import BaseDriver, DeviceInfo, InterfaceInfo, NeighborInfo
 
@@ -51,8 +50,8 @@ class UbiquitiSNMPDriver(BaseDriver):
         )
         return DeviceInfo(hostname=self.host, vendor="Ubiquiti")
 
-    async def get_interfaces(self) -> List[InterfaceInfo]:
+    async def get_interfaces(self) -> list[InterfaceInfo]:
         return []
 
-    async def get_neighbors(self) -> List[NeighborInfo]:
+    async def get_neighbors(self) -> list[NeighborInfo]:
         return []

@@ -15,10 +15,8 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta, timezone
-from typing import Optional
 
 from sqlalchemy import select, and_
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.db.models import Alert, AlertSeverity, AlertType, Device
@@ -32,7 +30,7 @@ settings = get_settings()
 def _make_dedup_key(
     device_id: int,
     alert_type: AlertType,
-    interface_name: Optional[str] = None,
+    interface_name: str | None = None,
 ) -> str:
     """Build a unique key for alert deduplication."""
     parts = [str(device_id), alert_type.value]
@@ -46,9 +44,9 @@ async def raise_alert(
     alert_type: AlertType,
     message: str,
     severity: AlertSeverity = AlertSeverity.WARNING,
-    interface_name: Optional[str] = None,
-    details: Optional[str] = None,
-) -> Optional[Alert]:
+    interface_name: str | None = None,
+    details: str | None = None,
+) -> Alert | None:
     """
     Create a new alert (if not already active) and trigger a Telegram notification.
     Implements debounce: will not re-fire if an identical active alert was sent
@@ -148,7 +146,7 @@ async def resolve_alert(
     device: Device,
     alert_type: AlertType,
     recovery_message: str,
-    interface_name: Optional[str] = None,
+    interface_name: str | None = None,
 ) -> None:
     """
     Mark active alert as resolved and send a recovery notification.

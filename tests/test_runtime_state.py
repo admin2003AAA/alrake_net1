@@ -26,7 +26,7 @@ class FakeRedis:
 
     async def set(self, key: str, value: str, ex: int | None = None, nx: bool = False):
         if nx and key in self.storage:
-            return False
+            return None
         self.storage[key] = value
         return True
 
