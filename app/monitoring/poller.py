@@ -10,7 +10,7 @@ import asyncio
 import logging
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from app.config import get_settings
 from app.db.models import (
@@ -247,10 +247,26 @@ async def _poll_ubnt_stub(device: Device) -> None:
     logger.debug("UBNT polling stub for %s (not implemented)", device.name)
 
 
-async def poll_all_devices() -> dict[str, int]:
-    """Fetch all devices from DB and poll each one."""
+async def poll_all_devices(
+    access_profiles: list[str] | None = None,
+    include_unassigned: bool = False,
+) -> dict[str, int | list[str] | bool]:
+    """Fetch matching devices from DB and poll each one."""
     async with AsyncSessionLocal() as db:
-        result = await db.execute(select(Device))
+        query = select(Device)
+        if access_profiles:
+            query = query.where(
+                Device.device_type == DeviceType.CISCO,
+                Device.access_profile.in_(access_profiles),
+            )
+        elif include_unassigned:
+            query = query.where(
+                or_(
+                    Device.device_type != DeviceType.CISCO,
+                    Device.access_profile.is_(None),
+                )
+            )
+        result = await db.execute(query)
         devices: list[Device] = sorted(
             list(result.scalars().all()),
             key=lambda device: (not device.is_bootstrap, device.id),
@@ -258,7 +274,13 @@ async def poll_all_devices() -> dict[str, int]:
 
     logger.info("Starting poll cycle for %d devices", len(devices))
     if not devices:
-        return {"devices_total": 0, "poll_concurrency": 0}
+        return {
+            "devices_total": 0,
+            "poll_concurrency": 0,
+            "access_profiles": access_profiles or [],
+            "include_unassigned": include_unassigned,
+            "failures": 0,
+        }
 
     concurrency = max(1, min(settings.poll_concurrency, len(devices)))
     semaphore = asyncio.Semaphore(concurrency)
@@ -278,5 +300,7 @@ async def poll_all_devices() -> dict[str, int]:
     return {
         "devices_total": len(devices),
         "poll_concurrency": concurrency,
+        "access_profiles": access_profiles or [],
+        "include_unassigned": include_unassigned,
         "failures": failures,
     }

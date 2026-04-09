@@ -78,8 +78,22 @@ def test_status_contains_runtime_fields(client, monkeypatch):
     async def _fake_runtime_state(name: str):
         return {"name": name, "status": "ok"}
 
+    def _fake_describe_scheduler_jobs():
+        return [
+            {
+                "id": "poller:profile:default",
+                "name": "Device Poller [profile:default]",
+                "next_run_time": None,
+                "group_key": "profile:default",
+                "access_profiles": ["default"],
+                "include_unassigned": False,
+                "runtime_state_key": "poller:profile:default",
+            }
+        ]
+
     monkeypatch.setattr("app.api.health.ping_redis", _fake_ping_redis)
     monkeypatch.setattr("app.api.health.get_runtime_state", _fake_runtime_state)
+    monkeypatch.setattr("app.monitoring.scheduler.describe_scheduler_jobs", _fake_describe_scheduler_jobs)
 
     response = client.get("/api/status")
     assert response.status_code == 200
@@ -88,7 +102,10 @@ def test_status_contains_runtime_fields(client, monkeypatch):
     assert data["redis"] == "connected"
     assert "scheduler_running" in data
     assert "jobs" in data
+    assert "job_details" in data
+    assert "grouped_runtime_state" in data
     assert data["runtime_state"]["poller"]["status"] == "ok"
+    assert data["grouped_runtime_state"]["poller:profile:default"]["status"] == "ok"
 
 
 def test_topology_endpoint_returns_graph(client):

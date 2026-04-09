@@ -449,6 +449,7 @@ async def _run_discovery_for_target(target: dict[str, Any]) -> dict[str, Any]:
 async def run_discovery(
     device_ids: list[int] | None = None,
     hosts: list[str] | None = None,
+    access_profiles: list[str] | None = None,
 ) -> dict[str, Any]:
     """
     Main discovery entry point.
@@ -462,12 +463,17 @@ async def run_discovery(
         device_ids=device_ids,
         hosts=hosts,
     )
+    if access_profiles:
+        targets = [
+            target for target in targets if target["access_profile"] in access_profiles
+        ]
     if not targets:
         return {
             "status": "skipped",
             "bootstrap_devices_total": 0,
             "successful_bootstrap_devices": 0,
             "failed_bootstrap_devices": 0,
+            "access_profiles": access_profiles or [],
             "results": [],
         }
 
@@ -486,5 +492,6 @@ async def run_discovery(
         "bootstrap_devices_total": len(targets),
         "successful_bootstrap_devices": successful,
         "failed_bootstrap_devices": failed,
+        "access_profiles": access_profiles or [],
         "results": results,
     }

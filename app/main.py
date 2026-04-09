@@ -54,7 +54,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Start scheduler (polling + discovery)
     from app.monitoring.scheduler import start_scheduler, stop_scheduler
-    start_scheduler()
+    await start_scheduler()
 
     # Start Telegram bot in background
     bot_task = asyncio.create_task(_run_bot())

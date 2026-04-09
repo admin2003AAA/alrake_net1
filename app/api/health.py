@@ -29,7 +29,7 @@ async def health_check() -> dict[str, Any]:
 async def status() -> dict[str, Any]:
     """Extended status with DB connectivity check."""
     from app.db.session import async_engine
-    from app.monitoring.scheduler import get_scheduler
+    from app.monitoring.scheduler import describe_scheduler_jobs, get_scheduler
     db_ok = False
     try:
         async with async_engine.connect() as conn:
@@ -42,6 +42,10 @@ async def status() -> dict[str, Any]:
     scheduler = get_scheduler()
     poller_state = await get_runtime_state("poller")
     discovery_state = await get_runtime_state("discovery")
+    job_details = describe_scheduler_jobs()
+    grouped_runtime_state: dict[str, Any] = {}
+    for job in job_details:
+        grouped_runtime_state[job["id"]] = await get_runtime_state(job["runtime_state_key"])
 
     overall_ok = db_ok and redis_ok
 
@@ -50,7 +54,9 @@ async def status() -> dict[str, Any]:
         "database": "connected" if db_ok else "unreachable",
         "redis": "connected" if redis_ok else "unreachable",
         "scheduler_running": scheduler.running,
-        "jobs": [job.id for job in scheduler.get_jobs()],
+        "jobs": [job["id"] for job in job_details],
+        "job_details": job_details,
+        "grouped_runtime_state": grouped_runtime_state,
         "runtime_state": {
             "poller": poller_state,
             "discovery": discovery_state,
