@@ -18,6 +18,8 @@
 | **High Performance Polling** | polling متوازٍ قابل للضبط عبر `POLL_CONCURRENCY` |
 | **Topology API** | endpoint مباشر لإخراج خريطة الأجهزة والروابط |
 | **Managed Cisco Seeds** | إضافة Cisco bootstrap devices من API مع `access_profile` بدون كشف كلمات المرور |
+| **Grouped Scheduling** | جدولة polling وdiscovery لكل مجموعة `access_profile` بشكل مستقل |
+| **Precise Stats APIs** | إحصاءات منفصلة للأجهزة، مجموعات الوصول، وBootstrap seeds |
 | **REST API** | FastAPI مع docs تلقائية |
 | **قاعدة بيانات** | PostgreSQL + SQLAlchemy 2 + Alembic |
 | **جدولة مهام** | APScheduler لـ polling ودورات الاكتشاف |
@@ -231,13 +233,18 @@ alembic history
 | GET | `/api/status` | حالة موسعة مع DB |
 | GET | `/api/devices` | قائمة الأجهزة |
 | GET | `/api/devices?bootstrap_only=true` | أجهزة الـ bootstrap فقط |
+| GET | `/api/devices/stats/summary` | ملخص inventory حسب النوع/الحالة/`access_profile` |
 | GET | `/api/devices/{id}` | تفاصيل جهاز |
+| GET | `/api/devices/{id}/stats` | إحصاءات تفصيلية للجهاز والواجهات والتنبيهات |
 | POST | `/api/devices/cisco` | إضافة/تحديث Cisco managed/bootstrap device مع access profile |
+| PUT | `/api/devices/cisco/{id}` | تعديل جهاز Cisco موجود |
+| DELETE | `/api/devices/cisco/{id}` | حذف جهاز Cisco من النظام |
 | GET | `/api/alerts` | قائمة التنبيهات |
 | GET | `/api/alerts?active_only=true` | التنبيهات النشطة |
 | GET | `/api/alerts/{id}` | تفاصيل تنبيه |
 | GET | `/api/topology` | خريطة topology للأجهزة والروابط |
 | GET | `/api/discovery/seeds` | عرض seed devices المعرفة حاليًا |
+| GET | `/api/discovery/stats` | إحصاءات دقيقة لكل seed/bootstrap device |
 | POST | `/api/discovery/run` | بدء اكتشاف يدوي |
 
 ---
@@ -282,6 +289,51 @@ curl -X POST http://localhost:8000/api/discovery/run
 ```
 
 > النظام سيربط كل جهاز Cisco مكتشف بالـ `access_profile` الخاص بجهاز الـ bootstrap الذي اكتشفه، مما يجعل polling لاحقًا أكثر دقة وفعالية.
+
+### تعديل جهاز Cisco موجود
+
+```bash
+curl -X PUT http://localhost:8000/api/devices/cisco/1 \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name": "core-sw-2-updated",
+    "ip_address": "10.0.0.22",
+    "access_profile": "dc1",
+    "ssh_port": 22,
+    "is_bootstrap": true
+  }'
+```
+
+### حذف جهاز Cisco
+
+```bash
+curl -X DELETE http://localhost:8000/api/devices/cisco/1
+```
+
+### جدولة مستقلة لكل مجموعة
+
+النظام أصبح الآن ينشئ jobs مستقلة في الـ scheduler لكل `access_profile`:
+
+- `poller:profile:<access_profile>`
+- `discovery:profile:<access_profile>`
+- `poller:unassigned` للأجهزة غير المرتبطة بمجموعة Cisco
+
+وبذلك:
+
+1. كل مجموعة Cisco تُدار بشكل مستقل.
+2. حالات التشغيل تحفظ في Redis بمفاتيح runtime منفصلة لكل job/group.
+3. أي إضافة/تعديل/حذف لجهاز Cisco من الـ API يعيد بناء الجدولة تلقائيًا.
+
+### واجهات الإحصاءات الدقيقة
+
+- `GET /api/devices/stats/summary`
+  - يعرض إجمالي الأجهزة، وعدد bootstrap devices، والتوزيع حسب الحالة والنوع و`access_profile`
+- `GET /api/devices/{id}/stats`
+  - يعرض عدد الواجهات، الواجهات up/down، التنبيهات النشطة، الروابط، ومجاميع errors/discards
+- `GET /api/discovery/stats`
+  - يعرض إحصاءات كل seed/bootstrap Cisco مع عدد الواجهات والروابط لكل seed
+- `GET /api/status`
+  - يعرض `job_details` و`grouped_runtime_state` لكل مجموعة scheduler بشكل مفصل
 
 ---
 
