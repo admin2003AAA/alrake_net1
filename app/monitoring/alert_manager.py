@@ -13,7 +13,6 @@ Public API:
 """
 from __future__ import annotations
 
-import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -24,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.db.models import Alert, AlertSeverity, AlertType, Device
 from app.db.session import AsyncSessionLocal
+from app.services.runtime_state import acquire_alert_debounce, clear_alert_debounce
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -58,6 +58,18 @@ async def raise_alert(
     dedup_key = _make_dedup_key(device.id, alert_type, interface_name)
     now = datetime.now(timezone.utc)
     debounce_cutoff = now - timedelta(seconds=settings.alert_debounce_seconds)
+    redis_gate_acquired = await acquire_alert_debounce(
+        dedup_key,
+        settings.alert_debounce_seconds,
+    )
+
+    if not redis_gate_acquired:
+        logger.debug(
+            "Alert suppressed by Redis debounce: %s for device %s",
+            alert_type.value,
+            device.name,
+        )
+        return None
 
     async with AsyncSessionLocal() as db:
         # Check for an existing active alert within the debounce window
@@ -172,6 +184,7 @@ async def resolve_alert(
         alert.is_active = False
         alert.resolved_at = now
         await db.commit()
+        await clear_alert_debounce(dedup_key)
 
     # Send recovery notification
     try:

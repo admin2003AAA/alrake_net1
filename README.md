@@ -14,6 +14,9 @@
 | **Telegram Bot** | تنبيهات فورية مع اسم الجهاز وIP والمنفذ والوصف والسبب المرجح |
 | **Deduplication** | لا تكرار للتنبيهات (debounce + dedup key) |
 | **Recovery Alerts** | إشعار عند رجوع الحالة للطبيعي |
+| **Redis Runtime State** | تخزين حالة polling/discovery وlocks موزعة بين أكثر من instance |
+| **High Performance Polling** | polling متوازٍ قابل للضبط عبر `POLL_CONCURRENCY` |
+| **Topology API** | endpoint مباشر لإخراج خريطة الأجهزة والروابط |
 | **REST API** | FastAPI مع docs تلقائية |
 | **قاعدة بيانات** | PostgreSQL + SQLAlchemy 2 + Alembic |
 | **جدولة مهام** | APScheduler لـ polling ودورات الاكتشاف |
@@ -226,6 +229,7 @@ alembic history
 | GET | `/api/alerts` | قائمة التنبيهات |
 | GET | `/api/alerts?active_only=true` | التنبيهات النشطة |
 | GET | `/api/alerts/{id}` | تفاصيل تنبيه |
+| GET | `/api/topology` | خريطة topology للأجهزة والروابط |
 | POST | `/api/discovery/run` | بدء اكتشاف يدوي |
 
 ---

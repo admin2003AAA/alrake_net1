@@ -49,6 +49,8 @@ class Settings(BaseSettings):
     # Redis
     # -------------------------------------------------------------------------
     redis_url: str = "redis://localhost:6379/0"
+    redis_key_prefix: str = "network_monitor"
+    redis_state_ttl_seconds: int = 86400
 
     # -------------------------------------------------------------------------
     # Cisco Bootstrap Device
@@ -84,8 +86,11 @@ class Settings(BaseSettings):
     # Polling
     # -------------------------------------------------------------------------
     poll_interval_seconds: int = 60
+    poll_concurrency: int = 10
     ssh_timeout: int = 30
     ssh_retries: int = 3
+    discovery_lock_seconds: int = 1800
+    poll_lock_seconds: int = 300
 
     # -------------------------------------------------------------------------
     # Alert Thresholds
@@ -129,6 +134,26 @@ class Settings(BaseSettings):
         v = v.upper()
         if v not in allowed:
             raise ValueError(f"log_level must be one of {allowed}")
+        return v
+
+    @field_validator(
+        "app_port",
+        "discovery_interval_seconds",
+        "poll_interval_seconds",
+        "poll_concurrency",
+        "ssh_timeout",
+        "ssh_retries",
+        "alert_debounce_seconds",
+        "recovery_grace_seconds",
+        "max_alerts_per_device",
+        "redis_state_ttl_seconds",
+        "discovery_lock_seconds",
+        "poll_lock_seconds",
+    )
+    @classmethod
+    def validate_positive_ints(cls, v: int) -> int:
+        if v <= 0:
+            raise ValueError("value must be greater than 0")
         return v
 
     def validate_required_for_run(self) -> None:

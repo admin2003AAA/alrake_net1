@@ -4,13 +4,14 @@ Registers and manages periodic jobs for polling and discovery.
 """
 from __future__ import annotations
 
-import asyncio
 import logging
+from datetime import datetime, timezone
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 from app.config import get_settings
+from app.services.runtime_state import distributed_lock, set_runtime_state
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -27,23 +28,79 @@ def get_scheduler() -> AsyncIOScheduler:
 
 async def _discovery_job() -> None:
     from app.services.discovery import run_discovery
-    try:
-        await run_discovery()
-    except Exception as exc:
-        logger.error("Discovery job failed: %s", exc)
+    async with distributed_lock("discovery", settings.discovery_lock_seconds) as acquired:
+        if not acquired:
+            logger.info("Skipping discovery job because another instance holds the lock")
+            return
+        await set_runtime_state(
+            "discovery",
+            {
+                "status": "running",
+                "started_at": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+        try:
+            summary = await run_discovery()
+            await set_runtime_state(
+                "discovery",
+                {
+                    "status": "ok",
+                    "finished_at": datetime.now(timezone.utc).isoformat(),
+                    "summary": summary,
+                },
+            )
+        except Exception as exc:
+            await set_runtime_state(
+                "discovery",
+                {
+                    "status": "failed",
+                    "error": str(exc),
+                    "finished_at": datetime.now(timezone.utc).isoformat(),
+                },
+            )
+            logger.error("Discovery job failed: %s", exc)
 
 
 async def _poll_job() -> None:
     from app.monitoring.poller import poll_all_devices
-    try:
-        await poll_all_devices()
-    except Exception as exc:
-        logger.error("Poll job failed: %s", exc)
+    async with distributed_lock("poller", settings.poll_lock_seconds) as acquired:
+        if not acquired:
+            logger.info("Skipping poll job because another instance holds the lock")
+            return
+        await set_runtime_state(
+            "poller",
+            {
+                "status": "running",
+                "started_at": datetime.now(timezone.utc).isoformat(),
+            },
+        )
+        try:
+            summary = await poll_all_devices()
+            await set_runtime_state(
+                "poller",
+                {
+                    "status": "ok",
+                    "finished_at": datetime.now(timezone.utc).isoformat(),
+                    "summary": summary,
+                },
+            )
+        except Exception as exc:
+            await set_runtime_state(
+                "poller",
+                {
+                    "status": "failed",
+                    "error": str(exc),
+                    "finished_at": datetime.now(timezone.utc).isoformat(),
+                },
+            )
+            logger.error("Poll job failed: %s", exc)
 
 
 def start_scheduler() -> None:
     """Start the background scheduler with configured intervals."""
     scheduler = get_scheduler()
+    if scheduler.running:
+        return
 
     if settings.discovery_enabled:
         scheduler.add_job(

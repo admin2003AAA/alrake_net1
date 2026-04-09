@@ -212,7 +212,7 @@ async def _upsert_topology_link(
     await db.flush()
 
 
-async def run_discovery() -> None:
+async def run_discovery() -> dict[str, int | str]:
     """
     Main discovery entry point.
     Connects to bootstrap Cisco and builds the topology.
@@ -238,9 +238,15 @@ async def run_discovery() -> None:
             settings.cisco_bootstrap_host,
             exc,
         )
-        return
+        return {
+            "bootstrap_host": settings.cisco_bootstrap_host,
+            "interfaces_discovered": 0,
+            "neighbors_discovered": 0,
+            "devices_upserted": 0,
+        }
 
     async with AsyncSessionLocal() as db:
+        devices_upserted = 1
         # Upsert bootstrap device
         bootstrap = await _upsert_device(
             db=db,
@@ -279,6 +285,7 @@ async def run_discovery() -> None:
                     hostname=neighbor.remote_hostname,
                     vendor=dtype.value.capitalize() if dtype != DeviceType.UNKNOWN else None,
                 )
+                devices_upserted += 1
 
             await _upsert_topology_link(db, bootstrap, neighbor, remote_device)
 
@@ -289,3 +296,9 @@ async def run_discovery() -> None:
         len(device_info.interfaces),
         len(device_info.neighbors),
     )
+    return {
+        "bootstrap_host": settings.cisco_bootstrap_host,
+        "interfaces_discovered": len(device_info.interfaces),
+        "neighbors_discovered": len(device_info.neighbors),
+        "devices_upserted": devices_upserted,
+    }

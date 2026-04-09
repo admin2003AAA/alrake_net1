@@ -9,6 +9,8 @@ from typing import Dict, Any
 from fastapi import APIRouter
 from sqlalchemy import text
 
+from app.services.runtime_state import get_runtime_state, ping_redis
+
 router = APIRouter()
 
 _start_time = time.time()
@@ -27,6 +29,7 @@ async def health_check() -> Dict[str, Any]:
 async def status() -> Dict[str, Any]:
     """Extended status with DB connectivity check."""
     from app.db.session import async_engine
+    from app.monitoring.scheduler import get_scheduler
     db_ok = False
     try:
         async with async_engine.connect() as conn:
@@ -35,8 +38,22 @@ async def status() -> Dict[str, Any]:
     except Exception:
         pass
 
+    redis_ok = await ping_redis()
+    scheduler = get_scheduler()
+    poller_state = await get_runtime_state("poller")
+    discovery_state = await get_runtime_state("discovery")
+
+    overall_ok = db_ok and redis_ok
+
     return {
-        "status": "ok" if db_ok else "degraded",
+        "status": "ok" if overall_ok else "degraded",
         "database": "connected" if db_ok else "unreachable",
+        "redis": "connected" if redis_ok else "unreachable",
+        "scheduler_running": scheduler.running,
+        "jobs": [job.id for job in scheduler.get_jobs()],
+        "runtime_state": {
+            "poller": poller_state,
+            "discovery": discovery_state,
+        },
         "uptime_seconds": round(time.time() - _start_time, 1),
     }

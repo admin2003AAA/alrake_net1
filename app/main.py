@@ -75,7 +75,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except (asyncio.CancelledError, Exception):
         pass
     from app.bot.bot import stop_bot
+    from app.services.runtime_state import close_redis_client
     await stop_bot()
+    await close_redis_client()
     logger.info("Shutdown complete")
 
 
@@ -112,4 +114,3 @@ app.add_middleware(
 )
 
 app.include_router(api_router)
-

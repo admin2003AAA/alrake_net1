@@ -6,6 +6,7 @@ Raises / resolves alerts based on current vs. previous state.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import List
@@ -222,16 +223,36 @@ async def _poll_ubnt_stub(device: Device) -> None:
     logger.debug("UBNT polling stub for %s (not implemented)", device.name)
 
 
-async def poll_all_devices() -> None:
+async def poll_all_devices() -> dict[str, int]:
     """Fetch all devices from DB and poll each one."""
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(Device))
-        devices: List[Device] = list(result.scalars().all())
+        devices: List[Device] = sorted(
+            list(result.scalars().all()),
+            key=lambda device: (not device.is_bootstrap, device.id),
+        )
 
     logger.info("Starting poll cycle for %d devices", len(devices))
-    for device in devices:
-        try:
-            await poll_device(device)
-        except Exception as exc:
-            logger.error("Unhandled error polling device %s: %s", device.name, exc)
+    if not devices:
+        return {"devices_total": 0, "poll_concurrency": 0}
+
+    concurrency = max(1, min(settings.poll_concurrency, len(devices)))
+    semaphore = asyncio.Semaphore(concurrency)
+    failures = 0
+
+    async def _bounded_poll(device: Device) -> None:
+        nonlocal failures
+        async with semaphore:
+            try:
+                await poll_device(device)
+            except Exception as exc:
+                failures += 1
+                logger.error("Unhandled error polling device %s: %s", device.name, exc)
+
+    await asyncio.gather(*(_bounded_poll(device) for device in devices))
     logger.info("Poll cycle complete")
+    return {
+        "devices_total": len(devices),
+        "poll_concurrency": concurrency,
+        "failures": failures,
+    }
