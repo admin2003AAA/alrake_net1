@@ -1,6 +1,6 @@
 # 🛡️ Network Monitor — نظام مراقبة الشبكات مع Cisco Bootstrap Discovery وتنبيهات Telegram
 
-نظام مراقبة شبكات احترافي ومفتوح المصدر، يبدأ من جهاز Cisco رئيسي (Switch/Router) ويبني خريطة topology تلقائيًا، مع إرسال تنبيهات فورية عبر Telegram عند اكتشاف أي مشكلة.
+نظام مراقبة شبكات احترافي ومفتوح المصدر، يدعم الآن **أكثر من جهاز Cisco Bootstrap** مع **Access Profiles متعددة**، ويبني خريطة topology تلقائيًا، مع إرسال تنبيهات فورية عبر Telegram عند اكتشاف أي مشكلة.
 
 ---
 
@@ -8,7 +8,7 @@
 
 | الميزة | الوصف |
 |--------|-------|
-| **Cisco Bootstrap** | يبدأ من IP + username + password لجهاز Cisco ويكتشف بقية الشبكة |
+| **Cisco Bootstrap متعدد** | يدعم Bootstrap واحد أو عدة أجهزة Cisco مع ملفات وصول متعددة |
 | **Auto Discovery** | يجمع جيران CDP/LLDP وجداول ARP/MAC تلقائيًا |
 | **دعم متعدد الأجهزة** | Cisco كامل، MikroTik وUBNT مُهيأة للتوسعة |
 | **Telegram Bot** | تنبيهات فورية مع اسم الجهاز وIP والمنفذ والوصف والسبب المرجح |
@@ -17,6 +17,7 @@
 | **Redis Runtime State** | تخزين حالة polling/discovery وlocks موزعة بين أكثر من instance |
 | **High Performance Polling** | polling متوازٍ قابل للضبط عبر `POLL_CONCURRENCY` |
 | **Topology API** | endpoint مباشر لإخراج خريطة الأجهزة والروابط |
+| **Managed Cisco Seeds** | إضافة Cisco bootstrap devices من API مع `access_profile` بدون كشف كلمات المرور |
 | **REST API** | FastAPI مع docs تلقائية |
 | **قاعدة بيانات** | PostgreSQL + SQLAlchemy 2 + Alembic |
 | **جدولة مهام** | APScheduler لـ polling ودورات الاكتشاف |
@@ -105,11 +106,15 @@ TELEGRAM_BOT_TOKEN=123456789:AAAA...
 # Chat ID للمدير (أو Group ID)
 TELEGRAM_ADMIN_CHAT_ID=987654321
 
-# Cisco Bootstrap Device (السويتش/الراوتر الرئيسي)
+# Cisco Bootstrap Device (توافق خلفي لجهاز واحد)
 CISCO_BOOTSTRAP_HOST=192.168.1.1
 CISCO_BOOTSTRAP_USERNAME=admin
 CISCO_BOOTSTRAP_PASSWORD=my_password
 CISCO_BOOTSTRAP_ENABLE_PASSWORD=enable_pass
+
+# أو الأفضل: تعريف عدة ملفات وصول وعدة Seed Devices
+CISCO_ACCESS_PROFILES_JSON=[{"name":"dc1","username":"admin","password":"pass","enable_password":"enable","device_type":"cisco_ios","ssh_port":22}]
+CISCO_SEED_DEVICES_JSON=[{"name":"core-sw-1","host":"192.168.1.1","access_profile":"dc1"}]
 
 # قاعدة البيانات
 DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/network_monitor
@@ -225,11 +230,14 @@ alembic history
 | GET | `/api/health` | فحص صحة التطبيق |
 | GET | `/api/status` | حالة موسعة مع DB |
 | GET | `/api/devices` | قائمة الأجهزة |
+| GET | `/api/devices?bootstrap_only=true` | أجهزة الـ bootstrap فقط |
 | GET | `/api/devices/{id}` | تفاصيل جهاز |
+| POST | `/api/devices/cisco` | إضافة/تحديث Cisco managed/bootstrap device مع access profile |
 | GET | `/api/alerts` | قائمة التنبيهات |
 | GET | `/api/alerts?active_only=true` | التنبيهات النشطة |
 | GET | `/api/alerts/{id}` | تفاصيل تنبيه |
 | GET | `/api/topology` | خريطة topology للأجهزة والروابط |
+| GET | `/api/discovery/seeds` | عرض seed devices المعرفة حاليًا |
 | POST | `/api/discovery/run` | بدء اكتشاف يدوي |
 
 ---
@@ -244,6 +252,36 @@ alembic history
 | `/devices` | قائمة الأجهزة |
 | `/alerts` | آخر التنبيهات النشطة |
 | `/discover` | بدء اكتشاف يدوي |
+
+---
+
+## 🧩 إدارة عدة أجهزة Cisco باحترافية
+
+لأفضل نتيجة في البيئات الحقيقية:
+
+1. عرّف `CISCO_ACCESS_PROFILES_JSON` لكل مجموعة credentials أو device type.
+2. عرّف `CISCO_SEED_DEVICES_JSON` لكل Core/Switch/Router تريد بدء الاكتشاف منه.
+3. أو أضف bootstrap devices ديناميكيًا عبر:
+
+```bash
+curl -X POST http://localhost:8000/api/devices/cisco \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name": "core-sw-2",
+    "ip_address": "10.0.0.2",
+    "access_profile": "dc1",
+    "ssh_port": 22,
+    "is_bootstrap": true
+  }'
+```
+
+4. شغّل الاكتشاف لكل الأجهزة المعرفة:
+
+```bash
+curl -X POST http://localhost:8000/api/discovery/run
+```
+
+> النظام سيربط كل جهاز Cisco مكتشف بالـ `access_profile` الخاص بجهاز الـ bootstrap الذي اكتشفه، مما يجعل polling لاحقًا أكثر دقة وفعالية.
 
 ---
 

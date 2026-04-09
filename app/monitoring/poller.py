@@ -42,6 +42,18 @@ def _counter_delta(previous_value: int, current_value: int) -> int:
     return current_value - previous_value
 
 
+def _resolve_cisco_profile(device: Device):
+    profile = settings.resolve_cisco_profile(device.access_profile)
+    if profile is None:
+        logger.warning(
+            "No Cisco access profile available for %s (%s), configured profile=%s",
+            device.name,
+            device.ip_address,
+            device.access_profile,
+        )
+    return profile
+
+
 async def poll_device(device: Device) -> None:
     """Poll a single device: collect interfaces and evaluate alerts."""
     logger.debug("Polling device: %s (%s)", device.name, device.ip_address)
@@ -58,13 +70,17 @@ async def poll_device(device: Device) -> None:
 
 async def _poll_cisco(device: Device) -> None:
     """Poll a Cisco device and evaluate interface alerts."""
+    profile = _resolve_cisco_profile(device)
+    if profile is None:
+        return
+
     driver = CiscoSSHDriver(
         host=device.ip_address,
-        username=settings.cisco_bootstrap_username,
-        password=settings.cisco_bootstrap_password,
+        username=profile.username,
+        password=profile.password,
         port=device.ssh_port,
-        enable_password=settings.cisco_bootstrap_enable_password,
-        device_type=settings.cisco_bootstrap_device_type,
+        enable_password=profile.enable_password,
+        device_type=profile.device_type,
         timeout=settings.ssh_timeout,
     )
 

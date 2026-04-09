@@ -96,6 +96,7 @@ class Device(Base):
     software_version: Mapped[str | None] = mapped_column(String(256), nullable=True)
     serial_number: Mapped[str | None] = mapped_column(String(128), nullable=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    access_profile: Mapped[str | None] = mapped_column(String(128), nullable=True)
     ssh_port: Mapped[int] = mapped_column(Integer, default=22)
     snmp_community: Mapped[str | None] = mapped_column(String(128), nullable=True)
     snmp_port: Mapped[int] = mapped_column(Integer, default=161)

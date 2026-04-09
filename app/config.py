@@ -4,11 +4,28 @@ All values are loaded from environment variables / .env file.
 """
 from __future__ import annotations
 
+import json
 import sys
 from functools import lru_cache
 
-from pydantic import field_validator
+from pydantic import BaseModel, ValidationError, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class CiscoAccessProfile(BaseModel):
+    name: str
+    username: str
+    password: str
+    enable_password: str = ""
+    device_type: str = "cisco_ios"
+    ssh_port: int = 22
+
+
+class CiscoSeedDevice(BaseModel):
+    name: str
+    host: str
+    access_profile: str = "default"
+    ssh_port: int | None = None
 
 
 class Settings(BaseSettings):
@@ -61,6 +78,8 @@ class Settings(BaseSettings):
     cisco_bootstrap_password: str = ""
     cisco_bootstrap_enable_password: str = ""
     cisco_bootstrap_device_type: str = "cisco_ios"
+    cisco_access_profiles_json: str = "[]"
+    cisco_seed_devices_json: str = "[]"
 
     # -------------------------------------------------------------------------
     # Discovery
@@ -86,6 +105,7 @@ class Settings(BaseSettings):
     # -------------------------------------------------------------------------
     poll_interval_seconds: int = 60
     poll_concurrency: int = 10
+    discovery_concurrency: int = 5
     ssh_timeout: int = 30
     ssh_retries: int = 3
     discovery_lock_seconds: int = 1800
@@ -140,6 +160,7 @@ class Settings(BaseSettings):
         "discovery_interval_seconds",
         "poll_interval_seconds",
         "poll_concurrency",
+        "discovery_concurrency",
         "ssh_timeout",
         "ssh_retries",
         "alert_debounce_seconds",
@@ -155,6 +176,84 @@ class Settings(BaseSettings):
             raise ValueError("value must be greater than 0")
         return v
 
+    def _parse_json_config(self, raw_value: str, field_name: str) -> list[dict]:
+        try:
+            payload = json.loads(raw_value or "[]")
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"{field_name} must contain valid JSON") from exc
+        if not isinstance(payload, list):
+            raise ValueError(f"{field_name} must be a JSON array")
+        return payload
+
+    @property
+    def cisco_access_profiles(self) -> dict[str, CiscoAccessProfile]:
+        profiles: dict[str, CiscoAccessProfile] = {}
+
+        if self.cisco_bootstrap_username and self.cisco_bootstrap_password:
+            profiles["default"] = CiscoAccessProfile(
+                name="default",
+                username=self.cisco_bootstrap_username,
+                password=self.cisco_bootstrap_password,
+                enable_password=self.cisco_bootstrap_enable_password,
+                device_type=self.cisco_bootstrap_device_type,
+                ssh_port=self.cisco_bootstrap_ssh_port,
+            )
+
+        for item in self._parse_json_config(
+            self.cisco_access_profiles_json,
+            "CISCO_ACCESS_PROFILES_JSON",
+        ):
+            profile = CiscoAccessProfile.model_validate(item)
+            profiles[profile.name] = profile
+
+        if (
+            "default" not in profiles
+            and self.default_device_username
+            and self.default_device_password
+        ):
+            profiles["default"] = CiscoAccessProfile(
+                name="default",
+                username=self.default_device_username,
+                password=self.default_device_password,
+                enable_password=self.default_device_enable_password,
+                device_type=self.cisco_bootstrap_device_type,
+                ssh_port=self.cisco_bootstrap_ssh_port,
+            )
+
+        return profiles
+
+    @property
+    def cisco_seed_devices(self) -> list[CiscoSeedDevice]:
+        seeds: list[CiscoSeedDevice] = []
+        seen_hosts: set[str] = set()
+
+        if self.cisco_bootstrap_host:
+            legacy_seed = CiscoSeedDevice(
+                name=self.cisco_bootstrap_name,
+                host=self.cisco_bootstrap_host,
+                access_profile="default",
+                ssh_port=self.cisco_bootstrap_ssh_port,
+            )
+            seeds.append(legacy_seed)
+            seen_hosts.add(legacy_seed.host)
+
+        for item in self._parse_json_config(
+            self.cisco_seed_devices_json,
+            "CISCO_SEED_DEVICES_JSON",
+        ):
+            seed = CiscoSeedDevice.model_validate(item)
+            if seed.host in seen_hosts:
+                continue
+            seeds.append(seed)
+            seen_hosts.add(seed.host)
+        return seeds
+
+    def resolve_cisco_profile(self, profile_name: str | None) -> CiscoAccessProfile | None:
+        profiles = self.cisco_access_profiles
+        if profile_name and profile_name in profiles:
+            return profiles[profile_name]
+        return profiles.get("default")
+
     def validate_required_for_run(self) -> None:
         """
         Check that the minimum required settings are configured.
@@ -166,14 +265,28 @@ class Settings(BaseSettings):
             errors.append("TELEGRAM_BOT_TOKEN is not set")
         if not self.telegram_admin_chat_id:
             errors.append("TELEGRAM_ADMIN_CHAT_ID is not set")
-        if not self.cisco_bootstrap_host:
-            errors.append("CISCO_BOOTSTRAP_HOST is not set")
-        if not self.cisco_bootstrap_username:
-            errors.append("CISCO_BOOTSTRAP_USERNAME is not set")
-        if not self.cisco_bootstrap_password:
-            errors.append("CISCO_BOOTSTRAP_PASSWORD is not set")
         if self.secret_key == "change_me_to_a_random_secret":
             errors.append("SECRET_KEY must be changed from the default placeholder")
+        try:
+            seeds = self.cisco_seed_devices
+            profiles = self.cisco_access_profiles
+        except (ValidationError, ValueError) as exc:
+            errors.append(str(exc))
+            seeds = []
+            profiles = {}
+        if not seeds:
+            errors.append(
+                "At least one Cisco bootstrap seed must be configured via legacy CISCO_BOOTSTRAP_* or CISCO_SEED_DEVICES_JSON"
+            )
+        if not profiles:
+            errors.append(
+                "At least one Cisco access profile must be configured via legacy CISCO_BOOTSTRAP_* credentials, DEFAULT_DEVICE_* credentials, or CISCO_ACCESS_PROFILES_JSON"
+            )
+        for seed in seeds:
+            if seed.access_profile not in profiles:
+                errors.append(
+                    f"Cisco seed {seed.host} references unknown access profile: {seed.access_profile}"
+                )
 
         if errors:
             for e in errors:

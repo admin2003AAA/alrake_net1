@@ -1,7 +1,7 @@
 """
 Discovery Service
 =================
-Bootstraps topology discovery from the primary Cisco device.
+Bootstraps topology discovery from one or more Cisco seed devices.
 
 Flow:
   1. Connect to bootstrap Cisco device via SSH.
@@ -15,13 +15,15 @@ Flow:
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime, timezone
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import Settings, get_settings
+from app.config import CiscoAccessProfile, Settings, get_settings
 from app.db.models import Device, DeviceType, DeviceStatus, Interface, InterfaceStatus, TopologyLink
 from app.db.session import AsyncSessionLocal
 from app.drivers.base import DeviceInfo, NeighborInfo
@@ -64,6 +66,8 @@ async def _upsert_device(
     software_version: str | None = None,
     serial_number: str | None = None,
     is_bootstrap: bool = False,
+    access_profile: str | None = None,
+    ssh_port: int | None = None,
 ) -> Device:
     """Insert or update a device record. Returns the device ORM object."""
     result = await db.execute(select(Device).where(Device.ip_address == ip))
@@ -82,6 +86,8 @@ async def _upsert_device(
             software_version=software_version,
             serial_number=serial_number,
             is_bootstrap=is_bootstrap,
+            access_profile=access_profile,
+            ssh_port=ssh_port or 22,
             last_seen=now,
         )
         db.add(device)
@@ -102,6 +108,10 @@ async def _upsert_device(
         device.last_seen = now
         if is_bootstrap:
             device.is_bootstrap = True
+        if access_profile:
+            device.access_profile = access_profile
+        if ssh_port:
+            device.ssh_port = ssh_port
         await db.flush()
         logger.debug("Updated device: %s (%s)", name, ip)
 
@@ -220,21 +230,135 @@ async def _upsert_topology_link(
     await db.flush()
 
 
-async def run_discovery() -> dict[str, int | str]:
-    """
-    Main discovery entry point.
-    Connects to bootstrap Cisco and builds the topology.
-    """
-    logger.info("Starting topology discovery from bootstrap device: %s", settings.cisco_bootstrap_host)
+def _serialize_seed_target(
+    name: str,
+    host: str,
+    access_profile: str,
+    ssh_port: int,
+    device_id: int | None = None,
+) -> dict[str, Any]:
+    return {
+        "device_id": device_id,
+        "name": name,
+        "host": host,
+        "access_profile": access_profile,
+        "ssh_port": ssh_port,
+    }
 
+
+def get_configured_seed_targets() -> list[dict[str, Any]]:
+    return [
+        _serialize_seed_target(
+            name=seed.name,
+            host=seed.host,
+            access_profile=seed.access_profile,
+            ssh_port=seed.ssh_port or settings.resolve_cisco_profile(seed.access_profile).ssh_port,
+        )
+        for seed in settings.cisco_seed_devices
+        if settings.resolve_cisco_profile(seed.access_profile) is not None
+    ]
+
+
+async def _get_db_seed_targets(
+    device_ids: list[int] | None = None,
+    hosts: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    async with AsyncSessionLocal() as db:
+        query = select(Device).where(
+            Device.is_bootstrap.is_(True),
+            Device.device_type == DeviceType.CISCO,
+        )
+        result = await db.execute(query)
+        devices = list(result.scalars().all())
+
+    selected: list[dict[str, Any]] = []
+    for device in devices:
+        if device_ids and device.id not in device_ids:
+            continue
+        if hosts and device.ip_address not in hosts:
+            continue
+        selected.append(
+            _serialize_seed_target(
+                device_id=device.id,
+                name=device.name,
+                host=device.ip_address,
+                access_profile=device.access_profile or "default",
+                ssh_port=device.ssh_port,
+            )
+        )
+    return selected
+
+
+def _merge_seed_targets(
+    configured_targets: list[dict[str, Any]],
+    db_targets: list[dict[str, Any]],
+    device_ids: list[int] | None = None,
+    hosts: list[str] | None = None,
+) -> list[dict[str, Any]]:
+    merged: dict[str, dict[str, Any]] = {}
+    for target in configured_targets:
+        if hosts and target["host"] not in hosts:
+            continue
+        merged[target["host"]] = target
+    for target in db_targets:
+        merged[target["host"]] = target
+
+    targets = list(merged.values())
+    if hosts:
+        targets = [target for target in targets if target["host"] in hosts]
+    if device_ids:
+        targets = [
+            target for target in targets
+            if target.get("device_id") in device_ids
+        ]
+    return sorted(targets, key=lambda target: (target["name"], target["host"]))
+
+
+def _build_cisco_driver(
+    host: str,
+    ssh_port: int,
+    profile: CiscoAccessProfile,
+) -> CiscoSSHDriver:
     driver = CiscoSSHDriver(
-        host=settings.cisco_bootstrap_host,
-        username=settings.cisco_bootstrap_username,
-        password=settings.cisco_bootstrap_password,
-        port=settings.cisco_bootstrap_ssh_port,
-        enable_password=settings.cisco_bootstrap_enable_password,
-        device_type=settings.cisco_bootstrap_device_type,
+        host=host,
+        username=profile.username,
+        password=profile.password,
+        port=ssh_port,
+        enable_password=profile.enable_password,
+        device_type=profile.device_type,
         timeout=settings.ssh_timeout,
+    )
+    return driver
+
+
+async def _run_discovery_for_target(target: dict[str, Any]) -> dict[str, Any]:
+    profile = settings.resolve_cisco_profile(target["access_profile"])
+    if profile is None:
+        logger.warning(
+            "Skipping discovery for %s because access profile %s is undefined",
+            target["host"],
+            target["access_profile"],
+        )
+        return {
+            "bootstrap_host": target["host"],
+            "bootstrap_name": target["name"],
+            "access_profile": target["access_profile"],
+            "interfaces_discovered": 0,
+            "neighbors_discovered": 0,
+            "devices_upserted": 0,
+            "status": "skipped",
+            "error": "missing access profile",
+        }
+
+    logger.info(
+        "Starting topology discovery from bootstrap device: %s (%s)",
+        target["host"],
+        target["access_profile"],
+    )
+    driver = _build_cisco_driver(
+        host=target["host"],
+        ssh_port=target["ssh_port"],
+        profile=profile,
     )
 
     try:
@@ -243,23 +367,26 @@ async def run_discovery() -> dict[str, int | str]:
     except Exception as exc:
         logger.error(
             "Failed to connect to bootstrap device %s: %s",
-            settings.cisco_bootstrap_host,
+            target["host"],
             exc,
         )
         return {
-            "bootstrap_host": settings.cisco_bootstrap_host,
+            "bootstrap_host": target["host"],
+            "bootstrap_name": target["name"],
+            "access_profile": target["access_profile"],
             "interfaces_discovered": 0,
             "neighbors_discovered": 0,
             "devices_upserted": 0,
+            "status": "failed",
+            "error": str(exc),
         }
 
     async with AsyncSessionLocal() as db:
         devices_upserted = 1
-        # Upsert bootstrap device
         bootstrap = await _upsert_device(
             db=db,
-            ip=settings.cisco_bootstrap_host,
-            name=device_info.hostname or settings.cisco_bootstrap_name,
+            ip=target["host"],
+            name=device_info.hostname or target["name"],
             device_type=DeviceType.CISCO,
             hostname=device_info.hostname,
             vendor=device_info.vendor,
@@ -267,6 +394,8 @@ async def run_discovery() -> dict[str, int | str]:
             software_version=device_info.software_version,
             serial_number=device_info.serial_number,
             is_bootstrap=True,
+            access_profile=target["access_profile"],
+            ssh_port=target["ssh_port"],
         )
         bootstrap.status = DeviceStatus.UP
         bootstrap.last_polled = datetime.now(timezone.utc)
@@ -292,6 +421,8 @@ async def run_discovery() -> dict[str, int | str]:
                     device_type=dtype,
                     hostname=neighbor.remote_hostname,
                     vendor=_vendor_label(dtype),
+                    access_profile=bootstrap.access_profile if dtype == DeviceType.CISCO else None,
+                    ssh_port=bootstrap.ssh_port if dtype == DeviceType.CISCO else None,
                 )
                 devices_upserted += 1
 
@@ -305,8 +436,55 @@ async def run_discovery() -> dict[str, int | str]:
         len(device_info.neighbors),
     )
     return {
-        "bootstrap_host": settings.cisco_bootstrap_host,
+        "bootstrap_host": target["host"],
+        "bootstrap_name": bootstrap.name,
+        "access_profile": target["access_profile"],
         "interfaces_discovered": len(device_info.interfaces),
         "neighbors_discovered": len(device_info.neighbors),
         "devices_upserted": devices_upserted,
+        "status": "ok",
+    }
+
+
+async def run_discovery(
+    device_ids: list[int] | None = None,
+    hosts: list[str] | None = None,
+) -> dict[str, Any]:
+    """
+    Main discovery entry point.
+    Connects to all configured/bootstrap Cisco seed devices and builds topology.
+    """
+    configured_targets = get_configured_seed_targets()
+    db_targets = await _get_db_seed_targets(device_ids=device_ids, hosts=hosts)
+    targets = _merge_seed_targets(
+        configured_targets=configured_targets,
+        db_targets=db_targets,
+        device_ids=device_ids,
+        hosts=hosts,
+    )
+    if not targets:
+        return {
+            "status": "skipped",
+            "bootstrap_devices_total": 0,
+            "successful_bootstrap_devices": 0,
+            "failed_bootstrap_devices": 0,
+            "results": [],
+        }
+
+    concurrency = max(1, min(settings.discovery_concurrency, len(targets)))
+    semaphore = asyncio.Semaphore(concurrency)
+
+    async def _bounded_target_run(target: dict[str, Any]) -> dict[str, Any]:
+        async with semaphore:
+            return await _run_discovery_for_target(target)
+
+    results = await asyncio.gather(*(_bounded_target_run(target) for target in targets))
+    successful = sum(1 for result in results if result["status"] == "ok")
+    failed = sum(1 for result in results if result["status"] == "failed")
+    return {
+        "status": "ok" if successful else "degraded",
+        "bootstrap_devices_total": len(targets),
+        "successful_bootstrap_devices": successful,
+        "failed_bootstrap_devices": failed,
+        "results": results,
     }
