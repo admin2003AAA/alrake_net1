@@ -66,6 +66,12 @@ def _now_str() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
+def _alert_time_str(alert: Alert) -> str:
+    if getattr(alert, "fired_at", None):
+        return alert.fired_at.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    return _now_str()
+
+
 def format_alert(device: Device, alert: Alert) -> str:
     """
     Format a professional Arabic/English alert message for Telegram.
@@ -101,7 +107,7 @@ def format_alert(device: Device, alert: Alert) -> str:
 
     lines += [
         "",
-        f"🕒 *الوقت:* {_now_str()}",
+        f"🕒 *الوقت:* {_alert_time_str(alert)}",
         f"🆔 *Alert ID:* `{alert.id or 'N/A'}`",
     ]
 
@@ -124,7 +130,7 @@ def format_recovery(device: Device, alert: Alert) -> str:
         "",
         f"✔️ *التفاصيل:* {alert.message}",
         "",
-        f"🕒 *الوقت:* {_now_str()}",
+        f"🕒 *الوقت:* {_alert_time_str(alert)}",
     ]
 
     return "\n".join(lines)

@@ -32,6 +32,16 @@ logger = logging.getLogger(__name__)
 settings = get_settings()
 
 
+def _counter_delta(previous_value: int, current_value: int) -> int:
+    """
+    Calculate a safe counter delta.
+    If the counter reset or wrapped, treat the current value as the fresh delta.
+    """
+    if current_value < previous_value:
+        return current_value
+    return current_value - previous_value
+
+
 async def poll_device(device: Device) -> None:
     """Poll a single device: collect interfaces and evaluate alerts."""
     logger.debug("Polling device: %s (%s)", device.name, device.ip_address)
@@ -144,10 +154,10 @@ async def _poll_cisco(device: Device) -> None:
                     )
 
                 # Check error/discard deltas
-                in_err_delta = max(0, iface_data.in_errors - iface.in_errors)
-                out_err_delta = max(0, iface_data.out_errors - iface.out_errors)
-                in_disc_delta = max(0, iface_data.in_discards - iface.in_discards)
-                out_disc_delta = max(0, iface_data.out_discards - iface.out_discards)
+                in_err_delta = _counter_delta(iface.in_errors, iface_data.in_errors)
+                out_err_delta = _counter_delta(iface.out_errors, iface_data.out_errors)
+                in_disc_delta = _counter_delta(iface.in_discards, iface_data.in_discards)
+                out_disc_delta = _counter_delta(iface.out_discards, iface_data.out_discards)
 
                 if is_error_rate_high(in_err_delta + out_err_delta):
                     await alert_manager.raise_alert(

@@ -29,6 +29,7 @@ from app.monitoring.thresholds import (
     is_reconnect_count_high,
     is_signal_weak,
 )
+from app.monitoring.poller import _counter_delta
 
 
 # ---------------------------------------------------------------------------
@@ -119,3 +120,11 @@ def test_reconnect_count_above_threshold():
 
 def test_reconnect_count_at_threshold():
     assert is_reconnect_count_high(5) is False
+
+
+def test_counter_delta_handles_reset():
+    assert _counter_delta(100, 5) == 5
+
+
+def test_counter_delta_handles_normal_increment():
+    assert _counter_delta(100, 125) == 25

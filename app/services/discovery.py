@@ -44,6 +44,15 @@ def _classify_device_type(platform: str, hostname: str) -> DeviceType:
     return DeviceType.UNKNOWN
 
 
+def _vendor_label(device_type: DeviceType) -> str | None:
+    mapping = {
+        DeviceType.CISCO: "Cisco",
+        DeviceType.MIKROTIK: "MikroTik",
+        DeviceType.UBNT: "Ubiquiti",
+    }
+    return mapping.get(device_type)
+
+
 async def _upsert_device(
     db: AsyncSession,
     ip: str,
@@ -282,7 +291,7 @@ async def run_discovery() -> dict[str, int | str]:
                     name=neighbor.remote_hostname or neighbor.remote_ip,
                     device_type=dtype,
                     hostname=neighbor.remote_hostname,
-                    vendor=dtype.value.capitalize() if dtype != DeviceType.UNKNOWN else None,
+                    vendor=_vendor_label(dtype),
                 )
                 devices_upserted += 1
 

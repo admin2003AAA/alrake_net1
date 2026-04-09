@@ -172,6 +172,8 @@ class Settings(BaseSettings):
             errors.append("CISCO_BOOTSTRAP_USERNAME is not set")
         if not self.cisco_bootstrap_password:
             errors.append("CISCO_BOOTSTRAP_PASSWORD is not set")
+        if self.secret_key == "change_me_to_a_random_secret":
+            errors.append("SECRET_KEY must be changed from the default placeholder")
 
         if errors:
             for e in errors:

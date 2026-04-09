@@ -64,9 +64,10 @@ def test_format_alert_contains_device_name():
 
 def test_format_alert_contains_ip():
     device = _make_device()
-    alert = _make_alert()
+    alert = _make_alert(fired_at=datetime(2026, 1, 2, 3, 4, 5, tzinfo=timezone.utc))
     text = format_alert(device, alert)
     assert "10.0.0.1" in text
+    assert "2026-01-02 03:04:05 UTC" in text
 
 
 def test_format_alert_contains_interface_name():
